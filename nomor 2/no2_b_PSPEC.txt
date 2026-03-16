@@ -1,0 +1,49 @@
+{ Konstanta lokal }
+  BIAYA_ADMIN   = Rp 200
+  NOMINAL_MIN   = Rp 2.000
+  NOMINAL_MAX   = Rp 1.000.000
+  SALDO_MINIMUM = Rp 2.000
+
+PROCESS TransferPulsa(no-pengirim, no-penerima, nominal)
+
+  { Langkah 1 — Validasi nominal }
+  IF nominal < NOMINAL_MIN OR nominal > NOMINAL_MAX
+    SET status-transfer = "GAGAL: Nominal tidak valid"
+    DISPLAY status-transfer ke pengirim
+    RETURN
+  ENDIF
+
+  { Langkah 2 — Cek saldo }
+  READ saldo dari ACCOUNTS where no-hp = no-pengirim
+
+  IF saldo < (nominal + BIAYA_ADMIN + SALDO_MINIMUM)
+    SET status-transfer = "GAGAL: Saldo tidak cukup"
+    DISPLAY status-transfer ke pengirim
+    RETURN
+  ENDIF
+
+  { Langkah 3 — Tampilkan konfirmasi }
+  DISPLAY ke pengirim:
+  "Kirim Rp.[nominal] ke [no-penerima]"
+    "Biaya admin: Rp.[BIAYA_ADMIN]"
+    "1=Ya  2=Tidak"
+  READ konfirmasi dari pengirim
+
+  IF konfirmasi = 2
+    SET status-transfer = "BATAL"
+    DISPLAY status-transfer ke pengirim
+    RETURN
+  ENDIF
+
+  { Langkah 4 — Eksekusi }
+  SUBTRACT (nominal + BIAYA_ADMIN) FROM saldo IN ACCOUNTS
+    where no-hp = no-pengirim
+    ADD nominal TO saldo IN ACCOUNTS
+    where no-hp = no-penerima
+
+  { Langkah 5 — Catat & notifikasi }
+  ADD ke TRANSACTIONS: (no-pengirim, no-penerima, nominal, now(), "SUKSES")
+
+  SET status-transfer = "SUKSES"
+  WRITE SMS ke no-pengirim: "Transfer Rp.[nominal] berhasil."
+  WRITE SMS ke no-penerima: "Kamu terima pulsa Rp.[nominal]."
